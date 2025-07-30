@@ -28,12 +28,13 @@ class CloseDocScraper:
     def is_documentation_url(self, url):
         """Check if URL is part of Close documentation"""
         parsed = urlparse(url)
-        return (parsed.netloc == 'developer.close.com' and 
-                not url.endswith('.pdf') and 
-                not url.endswith('.jpg') and 
-                not url.endswith('.png') and
-                not url.endswith('.css') and
-                not url.endswith('.js'))
+        
+        # More permissive URL filtering for debugging
+        is_close_domain = parsed.netloc == 'developer.close.com'
+        is_not_file = not any(url.endswith(ext) for ext in ['.pdf', '.jpg', '.png', '.css', '.js', '.svg', '.ico'])
+        is_not_external = not any(domain in url for domain in ['github.com', 'twitter.com', 'linkedin.com', 'mailto:', 'tel:'])
+        
+        return is_close_domain and is_not_file and is_not_external
     
     def clean_text(self, soup):
         """Extract and clean text from BeautifulSoup object"""
@@ -98,12 +99,19 @@ class CloseDocScraper:
             
             self.scraped_urls.add(url)
             
-            # Find all links on this page
+            # Find all links on this page - DEBUG VERSION
             links = []
+            all_links_found = []
+            
             for link in soup.find_all('a', href=True):
                 absolute_url = urljoin(url, link['href'])
+                all_links_found.append(absolute_url)
                 if self.is_documentation_url(absolute_url):
                     links.append(absolute_url)
+            
+            # Debug info for Streamlit
+            if status_text and url == self.base_url:
+                status_text.text(f"DEBUG: Found {len(all_links_found)} total links, {len(links)} documentation links on main page")
             
             # Small delay to be respectful
             time.sleep(0.5)
@@ -294,7 +302,7 @@ def main():
     # Configuration section
     st.subheader("🔧 Configuration")
     
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
     
     with col1:
         start_url = st.text_input(
@@ -305,6 +313,51 @@ def main():
     
     with col2:
         st.metric("Estimated Time", "10-20 minutes")
+    
+    with col3:
+        debug_mode = st.checkbox("🐛 Debug Mode", help="Show detailed scraping information")
+    
+    # Quick test section
+    if debug_mode:
+        st.subheader("🔍 Quick URL Test")
+        if st.button("Test Starting URL"):
+            with st.spinner("Testing URL accessibility..."):
+                try:
+                    test_session = requests.Session()
+                    test_session.headers.update({
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                    })
+                    
+                    response = test_session.get(start_url, timeout=10)
+                    soup = BeautifulSoup(response.content, 'html.parser')
+                    
+                    # Find all links
+                    all_links = [urljoin(start_url, link.get('href', '')) for link in soup.find_all('a', href=True)]
+                    
+                    # Test URL filter
+                    scraper_test = CloseDocScraper()
+                    doc_links = [link for link in all_links if scraper_test.is_documentation_url(link)]
+                    
+                    st.success(f"✅ URL accessible! Status: {response.status_code}")
+                    st.info(f"Found {len(all_links)} total links")
+                    st.info(f"Found {len(doc_links)} documentation links")
+                    
+                    if len(doc_links) > 0:
+                        with st.expander("Preview Documentation Links"):
+                            for link in doc_links[:10]:  # Show first 10
+                                st.write(f"- {link}")
+                            if len(doc_links) > 10:
+                                st.write(f"... and {len(doc_links) - 10} more")
+                    else:
+                        st.warning("⚠️ No documentation links found - this might explain the issue!")
+                        with st.expander("All Links Found (for debugging)"):
+                            for link in all_links[:20]:  # Show first 20
+                                st.write(f"- {link}")
+                                
+                except Exception as e:
+                    st.error(f"❌ Error testing URL: {str(e)}")
+        
+        st.divider()
     
     # Warning about rate limiting
     st.warning("""
