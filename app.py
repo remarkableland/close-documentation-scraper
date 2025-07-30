@@ -277,6 +277,15 @@ def main():
     st.title("📚 Close.com Documentation Scraper")
     st.markdown("### Comprehensive Close.com Developer Documentation Extractor")
     
+    # Add reset button and session state management
+    col1, col2 = st.columns([3, 1])
+    with col2:
+        if st.button("🔄 Reset & Clear Cache", type="secondary"):
+            # Clear all session state
+            for key in list(st.session_state.keys()):
+                del st.session_state[key]
+            st.rerun()
+    
     st.markdown("""
     This tool systematically scrapes the entire Close.com developer documentation 
     and organizes it into structured files perfect for AI training and reference.
@@ -309,7 +318,12 @@ def main():
     # Start scraping button
     if st.button("🚀 Start Comprehensive Documentation Scrape", type="primary"):
         
+        # Force create new scraper instance to clear any cached URLs
         scraper = CloseDocScraper()
+        
+        # Clear any existing session state
+        if 'scraper_results' in st.session_state:
+            del st.session_state['scraper_results']
         
         # Progress tracking
         progress_container = st.container()
